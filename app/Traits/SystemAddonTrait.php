@@ -4,105 +4,136 @@ namespace App\Traits;
 
 trait SystemAddonTrait
 {
-    /**
+   /**
+     * Get all published addons (Modules/{Module}/Addon).
      * @return array
      */
     public function get_addons(): array
     {
-        $dir = 'Modules';
+        $dir = base_path('Modules'); // absolute path
         $directories = self::getDirectories($dir);
 
         $addons = [];
         foreach ($directories as $directory) {
-            $sub_dirs = self::getDirectories('Modules/' . $directory);
-            if (in_array('Addon', $sub_dirs)) {
-                $addons[] = 'Modules/' . $directory;
+            $subDirs = self::getDirectories($dir . '/' . $directory);
+            if (in_array('Addon', $subDirs, true)) {
+                $addons[] = $dir . '/' . $directory;
             }
         }
 
-        $array = [];
-        foreach ($addons as $item) {
-            $full_data = include($item . '/Addon/info.php');
-            $array[] = [
-                'addon_name' => $full_data['name'],
-                'software_id' => $full_data['software_id'],
-                'is_published' => $full_data['is_published'],
+        $result = [];
+        foreach ($addons as $path) {
+            $infoFile = $path . '/Addon/info.php';
+            if (!is_file($infoFile)) {
+                continue;
+            }
+            /** @var array $full_data */
+            $full_data = include $infoFile;
+
+            $result[] = [
+                'addon_name'   => $full_data['name']         ?? '',
+                'software_id'  => $full_data['software_id']  ?? '',
+                'is_published' => $full_data['is_published'] ?? false,
             ];
         }
 
-        return $array;
+        return $result;
     }
 
     /**
+     * Get admin routes from published addons.
      * @return array
      */
     public function get_addon_admin_routes(): array
     {
-        $dir = 'Modules';
+        $dir = base_path('Modules');
+
         $directories = self::getDirectories($dir);
         $addons = [];
         foreach ($directories as $directory) {
-            $sub_dirs = self::getDirectories('Modules/' . $directory);
-            if (in_array('Addon', $sub_dirs)) {
-                $addons[] = 'Modules/' . $directory;
+            $subDirs = self::getDirectories($dir . '/' . $directory);
+            if (in_array('Addon', $subDirs, true)) {
+                $addons[] = $dir . '/' . $directory;
             }
         }
 
-        $full_data = [];
-        foreach ($addons as $item) {
-            $info = include($item . '/Addon/info.php');
-            if ($info['is_published']){
-                $full_data[] = include($item . '/Addon/admin_routes.php');
+        $routes = [];
+        foreach ($addons as $path) {
+            $infoFile = $path . '/Addon/info.php';
+            $routesFile = $path . '/Addon/admin_routes.php';
+            if (!is_file($infoFile) || !is_file($routesFile)) {
+                continue;
+            }
+
+            /** @var array $info */
+            $info = include $infoFile;
+            if (!empty($info['is_published'])) {
+                $routes[] = include $routesFile;
             }
         }
 
-        return $full_data;
+        return $routes;
     }
 
     /**
+     * Check publish status for payment gateway addon (Modules/Gateways).
      * @return array
      */
     public function get_payment_publish_status(): array
     {
-        $dir = 'Modules'; // Update the directory path to Modules/Gateways
+        $dir = base_path('Modules');
+
         $directories = self::getDirectories($dir);
-        // dd($directories);
-        $addons = [];
+        $gateways = [];
         foreach ($directories as $directory) {
-            $sub_dirs = self::getDirectories($dir . '/' . $directory); // Use $dir instead of 'Modules/'
-            if($directory == 'Gateways'){
-                if (in_array('Addon', $sub_dirs)) {
-                    $addons[] = $dir . '/' . $directory; // Use $dir instead of 'Modules/'
-                }
+            if ($directory !== 'Gateways') continue;
+
+            $subDirs = self::getDirectories($dir . '/' . $directory);
+            if (in_array('Addon', $subDirs, true)) {
+                $gateways[] = $dir . '/' . $directory;
             }
         }
 
-        $array = [];
-        foreach ($addons as $item) {
-            $full_data = include($item . '/Addon/info.php');
-            $array[] = [
-                'is_published' => $full_data['is_published'],
+        $result = [];
+        foreach ($gateways as $path) {
+            $infoFile = $path . '/Addon/info.php';
+            if (!is_file($infoFile)) {
+                continue;
+            }
+            /** @var array $full_data */
+            $full_data = include $infoFile;
+
+            $result[] = [
+                'is_published' => $full_data['is_published'] ?? false,
             ];
         }
 
-
-        return $array;
+        return $result;
     }
 
-
     /**
+     * Safe directory lister.
      * @param string $path
      * @return array
      */
     function getDirectories(string $path): array
     {
-        $directories = [];
+        if (!is_dir($path)) {
+            return [];
+        }
+
         $items = scandir($path);
+        if ($items === false) {
+            return [];
+        }
+
+        $directories = [];
         foreach ($items as $item) {
-            if ($item == '..' || $item == '.')
-                continue;
-            if (is_dir($path . '/' . $item))
+            if ($item === '.' || $item === '..') continue;
+            $full = $path . '/' . $item;
+            if (is_dir($full)) {
                 $directories[] = $item;
+            }
         }
         return $directories;
     }
