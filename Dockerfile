@@ -1,33 +1,33 @@
-# Use official PHP 8.2 with Apache
 FROM php:8.2-apache
 
-# Install system dependencies and PHP extensions
+# System deps + PHP extensions (incl. ZIP)
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
     zip \
+    curl \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
-    curl \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+    libzip-dev \
+    zlib1g-dev \
+ && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
 
-# Enable Apache mod_rewrite
+# Apache mod_rewrite
 RUN a2enmod rewrite
 
-# Set working directory
 WORKDIR /var/www/html
 
-# Copy composer
+# Composer
 COPY --from=composer:2.5 /usr/bin/composer /usr/bin/composer
 
-# Copy project files
+# Copy code
 COPY . .
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+# Install PHP deps (prod)
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-# Set Apache vhost to serve Laravel public folder
+# Serve /public
 RUN echo '<VirtualHost *:80> \
     DocumentRoot /var/www/html/public \
     <Directory /var/www/html/public> \
@@ -37,8 +37,5 @@ RUN echo '<VirtualHost *:80> \
     </Directory> \
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-# Expose port
 EXPOSE 80
-
-# Start Apache
 CMD ["apache2-foreground"]
