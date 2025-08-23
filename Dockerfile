@@ -7,37 +7,39 @@ RUN apt-get update && apt-get install -y \
     libzip-dev zlib1g-dev \
  && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
 
-# Apache + working dir
+# Apache + workdir
 RUN a2enmod rewrite
 WORKDIR /var/www/html
 
 # Composer
 COPY --from=composer:2.5 /usr/bin/composer /usr/bin/composer
 
-# Copy code
+# Code
 COPY . .
 
 # Composer install (prod)
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-# Permissions for storage/bootstrap (avoid write errors)
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
- && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Permissions (Laravel write)
+RUN chown -R www-data:www-data storage bootstrap/cache && \
+    chmod -R 775 storage bootstrap/cache
 
-# Proper Apache vhost via heredoc
-RUN bash -lc 'cat > /etc/apache2/sites-available/000-default.conf << "EOF"\n\
-<VirtualHost *:80>\n\
-    ServerName localhost\n\
-    DocumentRoot /var/www/html/public\n\
-    <Directory /var/www/html/public>\n\
-        Options Indexes FollowSymLinks\n\
-        AllowOverride All\n\
-        Require all granted\n\
-    </Directory>\n\
-    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
-    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
-</VirtualHost>\n\
-EOF'
+# Proper vhost (heredoc — variables not expanded)
+RUN cat >/etc/apache2/sites-available/000-default.conf <<'EOF'
+<VirtualHost *:80>
+    ServerName localhost
+    DocumentRoot /var/www/html/public
+
+    <Directory /var/www/html/public>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOF
 
 EXPOSE 80
 CMD ["apache2-foreground"]
