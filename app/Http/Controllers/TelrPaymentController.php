@@ -71,9 +71,11 @@ class TelrPaymentController extends Controller
             'ivp_currency' => $data->currency_code ?: 'AED',                       // use your default ISO (AED/USD)
             'ivp_desc'     => 'Payment ID: ' . $data->id,
             // Telr will redirect the customer here
-            'return_auth'  => route('telr.success'),
-            'return_decl'  => route('telr.cancel'),
-            'return_can'   => route('telr.cancel'),
+           // payment() me:
+'return_auth'  => route('telr.success', ['payment_id' => (string)$data->id]),
+'return_decl'  => route('telr.cancel',  ['payment_id' => (string)$data->id]),
+'return_can'   => route('telr.cancel',  ['payment_id' => (string)$data->id]),
+
             // Optional billing fields
             'bill_city'    => $data->customer_city ?? '',
             'bill_country' => $data->customer_country ?? '',
@@ -153,13 +155,19 @@ class TelrPaymentController extends Controller
     $ref    = $request->input('OrderRef') ?: $request->input('order_ref');
     $cartId = $request->input('cartid', $request->input('cart_id'));
 
-    $payment = null;
-    if ($cartId) {
+    // 1) direct payment_id (best)
+    if ($request->filled('payment_id')) {
+        $payment = $this->payment::find($request->input('payment_id'));
+    }
+
+    // 2) cartid (agar aya ho)
+    if (empty($payment) && $cartId) {
         $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
     }
 
-    if (!$payment && $ref) {
-        $payment = $this->payment::where('id', $ref)->first();
+    // 3) telr_order_ref (Option B lagane ke baad)
+    if (empty($payment) && $ref) {
+        $payment = $this->payment::where('telr_order_ref', $ref)->first();
     }
 
     if (!$payment) {
