@@ -118,12 +118,12 @@ class TelrPaymentController extends Controller
     /** Customer cancelled/declined */
     public function cancel(Request $request)
 {
-    // Telr may post back without payment_id; try cart id
+    \Log::info('Telr Cancel Callback', $request->all());
+
     $cartId  = $request->input('cartid', $request->input('cart_id'));
     $payment = null;
 
     if ($cartId) {
-        // our ivp_cart is UUID without dashes
         $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
     }
 
@@ -131,39 +131,54 @@ class TelrPaymentController extends Controller
         $payment = $this->payment::find($request['payment_id']);
     }
 
+    if (!$payment) {
+        // gracefully handle when no matching payment found
+        return response()->json([
+            'status'  => 'cancel',
+            'message' => 'No matching payment found for this Telr cancel request',
+            'data'    => $request->all()
+        ], 200);
+    }
+
     return $this->payment_response($payment, 'cancel');
 }
+
 
 
     /** Customer returned from Telr; verify the order */
     public function success(Request $request)
 {
-    $ref    = $request->input('order_ref');
+    \Log::info('Telr Success Callback', $request->all());
+
+    $ref    = $request->input('OrderRef') ?: $request->input('order_ref');
     $cartId = $request->input('cartid', $request->input('cart_id'));
 
-    if (!$ref || !$cartId) {
-        \Log::warning('Telr return missing params', $request->all());
-
-        $payment = null;
-        if ($cartId) {
-            $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        } elseif ($request->filled('payment_id')) {
-            $payment = $this->payment::find($request['payment_id']);
-        }
-
-        if ($payment && function_exists($payment->failure_hook)) {
-            call_user_func($payment->failure_hook, $payment);
-        }
-        return $this->payment_response($payment, 'fail');
+    $payment = null;
+    if ($cartId) {
+        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
     }
 
-    // verify with Telr
+    if (!$payment && $ref) {
+        $payment = $this->payment::where('id', $ref)->first();
+    }
+
+    if (!$payment) {
+        return response()->json([
+            'status'  => 'fail',
+            'message' => 'No matching payment found for this Telr success request',
+            'data'    => $request->all()
+        ], 200);
+    }
+
+    // Verify the order via Telr API
     $verify = [
         'ivp_method'  => 'check',
         'ivp_store'   => $this->config_values->store_id ?? '',
         'ivp_authkey' => $this->config_values->auth_key ?? '',
-        'order_ref'   => $ref,
+        'order_ref'   => $request->input('OrderRef') ?: $request->input('order_ref'),
     ];
+
+    \Log::info('Telr Verify Request', $verify);
 
     $ch = curl_init($this->base_url);
     curl_setopt_array($ch, [
@@ -178,11 +193,6 @@ class TelrPaymentController extends Controller
     if (curl_errno($ch)) {
         \Log::error('Telr check curl error', ['error' => curl_error($ch)]);
         curl_close($ch);
-
-        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        if ($payment && function_exists($payment->failure_hook)) {
-            call_user_func($payment->failure_hook, $payment);
-        }
         return $this->payment_response($payment, 'fail');
     }
     curl_close($ch);
@@ -191,25 +201,22 @@ class TelrPaymentController extends Controller
     \Log::info('Telr check response', ['raw' => $raw, 'json' => $res]);
 
     if (!empty($res['order']['status']['code']) && (int)$res['order']['status']['code'] === 3) {
-        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        if ($payment) {
-            $payment->update([
-                'payment_method' => 'telr',
-                'is_paid'        => 1,
-                'transaction_id' => $ref,
-            ]);
-            if (function_exists($payment->success_hook)) {
-                call_user_func($payment->success_hook, $payment);
-            }
+        $payment->update([
+            'payment_method' => 'telr',
+            'is_paid'        => 1,
+            'transaction_id' => $res['order']['transaction']['ref'] ?? $ref,
+        ]);
+        if (is_callable($payment->success_hook ?? null)) {
+            call_user_func($payment->success_hook, $payment);
         }
         return $this->payment_response($payment, 'success');
     }
 
-    $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-    if ($payment && function_exists($payment->failure_hook)) {
+    if (is_callable($payment->failure_hook ?? null)) {
         call_user_func($payment->failure_hook, $payment);
     }
     return $this->payment_response($payment, 'fail');
 }
+
 
 }
