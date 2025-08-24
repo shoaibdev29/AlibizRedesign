@@ -7,193 +7,190 @@ use App\Traits\Processor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;  
 
 class TelrPaymentController extends Controller
 {
     use Processor;
-    private $config_values;
-    private $base_url;
+
+    /** @var object|null */
+    private $config_values;          // store_id, auth_key
+    /** @var string */
+    private string $mode = 'live';   // 'test' | 'live'
+    /** @var string */
+    private string $base_url = 'https://secure.telr.com/gateway/order.json';
+    /** @var PaymentRequest */
     private PaymentRequest $payment;
 
     public function __construct(PaymentRequest $payment)
     {
-        $config = $this->payment_config('telr', 'payment_config');
-        if (!is_null($config) && $config->mode == 'live') {
-            $this->config_values = json_decode($config->live_values);
-        } elseif (!is_null($config) && $config->mode == 'test') {
-            $this->config_values = json_decode($config->test_values);
-        }
-
-        if($config){
-            $this->base_url = ($config->mode == 'test') 
-                ? 'https://secure.telr.com/gateway/order.json' 
-                : 'https://secure.telr.com/gateway/order.json';
-        }
         $this->payment = $payment;
+
+        // payment_config('telr','payment_config') should return an object with: mode, live_values, test_values
+        $config = $this->payment_config('telr', 'payment_config');
+
+        if ($config) {
+            $this->mode = $config->mode ?? 'live';
+
+            // pick the right credentials for the active mode
+            $this->config_values = json_decode(
+                $this->mode === 'live' ? $config->live_values : $config->test_values
+            );
+        }
     }
 
-    /**
-     * Generate authentication key for Telr (different from PayPal's OAuth)
-     */
-    public function generateAuthKey()
+    /** Telr does not use OAuth; helper kept for parity */
+    public function generateAuthKey(): string
     {
-        // Telr uses a different authentication approach
-        // It typically requires store ID and authentication key
-        return base64_encode($this->config_values->store_id . ':' . $this->config_values->auth_key);
+        return base64_encode(($this->config_values->store_id ?? '') . ':' . ($this->config_values->auth_key ?? ''));
     }
 
-    /**
-     * Process payment request to Telr
-     */
+    /** Create an order on Telr and redirect the customer */
     public function payment(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'payment_id' => 'required|uuid'
+            'payment_id' => 'required|uuid',
         ]);
 
         if ($validator->fails()) {
             return response()->json($this->response_formatter(GATEWAYS_DEFAULT_400, null, $this->error_processor($validator)), 400);
         }
 
-        $data = $this->payment::where(['id' => $request['payment_id']])->where(['is_paid' => 0])->first();
-        if (!isset($data)) {
+        $data = $this->payment::where(['id' => $request['payment_id'], 'is_paid' => 0])->first();
+        if (!$data) {
             return response()->json($this->response_formatter(GATEWAYS_DEFAULT_204), 200);
         }
 
-        // Prepare Telr-specific request parameters
-        $requestParams = [
-            'ivp_method' => 'create',
-            'ivp_store' => $this->config_values->store_id,
-            'ivp_authkey' => $this->config_values->auth_key,
-            'ivp_cart' => substr(preg_replace('/[^A-Za-z0-9]/', '', $data->id), 0, 12),
-            'ivp_test' => ($this->config_values->mode == 'test') ? 1 : 0,
-            'ivp_amount' => round($data->payment_amount, 2),
-            'ivp_currency' => $data->currency_code ?? 'USD',
-            'ivp_desc' => 'Payment ID: ' . $data->id,
-            'return_auth' => route('telr.success', ['payment_id' => $data->id]),
-            'return_decl' => route('telr.cancel', ['payment_id' => $data->id]),
-            'return_can' => route('telr.cancel', ['payment_id' => $data->id]),
-            'bill_city' => $data->customer_city ?? '',
+        // Build Telr create request
+        $params = [
+            'ivp_method'   => 'create',
+            'ivp_store'    => $this->config_values->store_id ?? '',
+            'ivp_authkey'  => $this->config_values->auth_key ?? '',
+            'ivp_cart'     => substr(preg_replace('/[^A-Za-z0-9]/', '', (string)$data->id), 0, 32),
+            'ivp_test'     => ($this->mode === 'test') ? 1 : 0,                    // <- FIXED: use config mode
+            'ivp_amount'   => round((float)$data->payment_amount, 2),
+            'ivp_currency' => $data->currency_code ?: 'AED',                       // use your default ISO (AED/USD)
+            'ivp_desc'     => 'Payment ID: ' . $data->id,
+            // Telr will redirect the customer here
+            'return_auth'  => route('telr.success', ['payment_id' => $data->id]),
+            'return_decl'  => route('telr.cancel',  ['payment_id' => $data->id]),
+            'return_can'   => route('telr.cancel',  ['payment_id' => $data->id]),
+            // Optional billing fields
+            'bill_city'    => $data->customer_city ?? '',
             'bill_country' => $data->customer_country ?? '',
-            'bill_email' => $data->customer_email ?? '',
-            'bill_fname' => $data->customer_name ?? '',
-            'bill_title' => 'Payment',
+            'bill_email'   => $data->customer_email ?? '',
+            'bill_fname'   => $data->customer_name ?? '',
+            'bill_title'   => 'Payment',
         ];
-        \Log::info('Telr Params:', $requestParams);
 
+        \Log::info('Telr create params', $params);
 
-        // Initialize cURL session for Telr
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $this->base_url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($requestParams));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        
-        $headers = array();
-        $headers[] = 'Content-Type: application/x-www-form-urlencoded';
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        // cURL call
+        $ch = curl_init($this->base_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query($params),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT        => 45,
+            // In prod you should verify peer; keep false only if CA bundle not present
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
 
-        $response = curl_exec($ch);
+        $raw = curl_exec($ch);
         if (curl_errno($ch)) {
-            return response()->json($this->response_formatter(GATEWAYS_DEFAULT_404, null, ['error' => curl_error($ch)]), 404);
+            \Log::error('Telr create curl error', ['error' => curl_error($ch)]);
+            curl_close($ch);
+            return response()->json($this->response_formatter(GATEWAYS_DEFAULT_404, null, ['error' => 'Gateway not reachable']), 404);
         }
         curl_close($ch);
 
-        $responseData = json_decode($response, true);
+        $res = json_decode($raw, true);
+        \Log::info('Telr create response', ['raw' => $raw, 'json' => $res]);
 
-        if (isset($responseData['order']) && isset($responseData['order']['url'])) {
-            // Redirect to Telr payment page
-            return Redirect::away($responseData['order']['url']);
-        } else {
-            // Handle error response from Telr
-            $error = $responseData['error'] ?? ['message' => 'Unknown error from Telr'];
-            return response()->json($this->response_formatter(GATEWAYS_DEFAULT_400, null, $error), 400);
+        if (!empty($res['order']['url'])) {
+            return Redirect::away($res['order']['url']);
         }
+
+        $error = $res['error'] ?? ['message' => 'Unknown error from Telr'];
+        return response()->json($this->response_formatter(GATEWAYS_DEFAULT_400, null, $error), 400);
     }
 
-    /**
-     * Handle cancelled payment
-     */
+    /** Customer cancelled/declined */
     public function cancel(Request $request)
     {
-        $data = $this->payment::where(['id' => $request['payment_id']])->first();
+        $data = $this->payment::find($request['payment_id']);
         return $this->payment_response($data, 'cancel');
     }
 
-    /**
-     * Handle successful payment
-     */
+    /** Customer returned from Telr; verify the order */
     public function success(Request $request)
     {
-        // Telr sends payment reference in the request
-        $ref = $request->input('order_ref');
-        $cartId = $request->input('cart_id');
-        
+        // Telr sends cart id as `cartid` (no underscore). Keep fallback for `cart_id`.
+        $ref    = $request->input('order_ref');
+        $cartId = $request->input('cartid', $request->input('cart_id'));   // <- FIXED
+
         if (!$ref || !$cartId) {
-            $payment_data = $this->payment::where(['id' => $request['payment_id']])->first();
-            if (isset($payment_data) && function_exists($payment_data->failure_hook)) {
-                call_user_func($payment_data->failure_hook, $payment_data);
+            \Log::warning('Telr return missing params', $request->all());
+            $payment = $this->payment::find($request['payment_id']);
+            if ($payment && function_exists($payment->failure_hook)) {
+                call_user_func($payment->failure_hook, $payment);
             }
-            return $this->payment_response($payment_data, 'fail');
+            return $this->payment_response($payment, 'fail');
         }
 
-        // Verify payment with Telr
-        $verifyParams = [
-            'ivp_method' => 'check',
-            'ivp_store' => $this->config_values->store_id,
-            'ivp_authkey' => $this->config_values->auth_key,
-            'order_ref' => $ref,
+        // Verify the order on Telr
+        $verify = [
+            'ivp_method'  => 'check',
+            'ivp_store'   => $this->config_values->store_id ?? '',
+            'ivp_authkey' => $this->config_values->auth_key ?? '',
+            'order_ref'   => $ref,
         ];
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $this->base_url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($verifyParams));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        
-        $headers = array();
-        $headers[] = 'Content-Type: application/x-www-form-urlencoded';
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $ch = curl_init($this->base_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query($verify),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT        => 45,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
 
-        $response = curl_exec($ch);
+        $raw = curl_exec($ch);
         if (curl_errno($ch)) {
-            $payment_data = $this->payment::where(['id' => $request['payment_id']])->first();
-            if (isset($payment_data) && function_exists($payment_data->failure_hook)) {
-                call_user_func($payment_data->failure_hook, $payment_data);
+            \Log::error('Telr check curl error', ['error' => curl_error($ch)]);
+            curl_close($ch);
+            $payment = $this->payment::find($request['payment_id']);
+            if ($payment && function_exists($payment->failure_hook)) {
+                call_user_func($payment->failure_hook, $payment);
             }
-            return $this->payment_response($payment_data, 'fail');
+            return $this->payment_response($payment, 'fail');
         }
         curl_close($ch);
 
-        $responseData = json_decode($response, true);
+        $res = json_decode($raw, true);
+        \Log::info('Telr check response', ['raw' => $raw, 'json' => $res]);
 
-        // Check if payment was successful
-        if (isset($responseData['order']) && 
-            isset($responseData['order']['status']) && 
-            $responseData['order']['status']['code'] == 3) { // 3 means completed in Telr
-            
-            $this->payment::where(['id' => $request['payment_id']])->update([
+        // Status 3 = paid/authorised (per Telr docs)
+        if (!empty($res['order']['status']['code']) && (int)$res['order']['status']['code'] === 3) {
+            $this->payment::where('id', $request['payment_id'])->update([
                 'payment_method' => 'telr',
-                'is_paid' => 1,
+                'is_paid'        => 1,
                 'transaction_id' => $ref,
             ]);
 
-            $data = $this->payment::where(['id' => $request['payment_id']])->first();
-
-            if (isset($data) && function_exists($data->success_hook)) {
+            $data = $this->payment::find($request['payment_id']);
+            if ($data && function_exists($data->success_hook)) {
                 call_user_func($data->success_hook, $data);
             }
-
             return $this->payment_response($data, 'success');
         }
 
-        $payment_data = $this->payment::where(['id' => $request['payment_id']])->first();
-        if (isset($payment_data) && function_exists($payment_data->failure_hook)) {
-            call_user_func($payment_data->failure_hook, $payment_data);
+        // Not paid
+        $payment = $this->payment::find($request['payment_id']);
+        if ($payment && function_exists($payment->failure_hook)) {
+            call_user_func($payment->failure_hook, $payment);
         }
-        return $this->payment_response($payment_data, 'fail');
+        return $this->payment_response($payment, 'fail');
     }
 }
