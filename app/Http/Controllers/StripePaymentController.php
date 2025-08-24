@@ -16,6 +16,7 @@ class StripePaymentController extends Controller
     private $config_values;
     private PaymentRequest $payment;
 
+
     public function __construct(PaymentRequest $payment)
     {
         $config = $this->payment_config('stripe', 'payment_config');
