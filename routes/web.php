@@ -137,9 +137,9 @@ if (!$is_published) {
         });
 
       //TELR 
-     Route::get('/payment/telr/success', [TelrPaymentController::class, 'success'])->name('telr.success');
-Route::get('/payment/telr/cancel', [TelrPaymentController::class, 'cancel'])->name('telr.cancel');
-Route::post('/payment/telr', [TelrPaymentController::class, 'payment'])->name('telr.payment');
+     Route::any('/payment/telr/success', [TelrPaymentController::class, 'success'])->name('telr.success');
+Route::any('/payment/telr/cancel', [TelrPaymentController::class, 'cancel'])->name('telr.cancel');
+Route::any('/payment/telr', [TelrPaymentController::class, 'payment'])->name('telr.payment');
 
     });
 }
