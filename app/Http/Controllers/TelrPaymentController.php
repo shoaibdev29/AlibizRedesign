@@ -138,26 +138,34 @@ class TelrPaymentController extends Controller
     /** Customer returned from Telr; verify the order */
     public function success(Request $request)
 {
-    $ref    = $request->input('order_ref');
+    // Telr sends order ref differently: "order_ref" or "OrderRef"
+    $ref    = $request->input('order_ref', $request->input('OrderRef'));
     $cartId = $request->input('cartid', $request->input('cart_id'));
+    $status = $request->input('STATUS');
 
-    if (!$ref || !$cartId) {
+    // Debug log
+    \Log::info('Telr success hit', $request->all());
+
+    if ((!$ref && !$cartId) && $status != 9) {
         \Log::warning('Telr return missing params', $request->all());
-
-        $payment = null;
-        if ($cartId) {
-            $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        } elseif ($request->filled('payment_id')) {
-            $payment = $this->payment::find($request['payment_id']);
-        }
-
-        if ($payment && function_exists($payment->failure_hook)) {
-            call_user_func($payment->failure_hook, $payment);
-        }
+        $payment = $request->filled('payment_id') ? $this->payment::find($request['payment_id']) : null;
         return $this->payment_response($payment, 'fail');
     }
 
-    // verify with Telr
+    // If hosted page returned STATUS=9 (success), mark as paid directly
+    if ($status == 9 && $ref) {
+        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
+        if ($payment) {
+            $payment->update([
+                'payment_method' => 'telr',
+                'is_paid'        => 1,
+                'transaction_id' => $ref,
+            ]);
+        }
+        return $this->payment_response($payment, 'success');
+    }
+
+    // Otherwise fallback: call Telr check API
     $verify = [
         'ivp_method'  => 'check',
         'ivp_store'   => $this->config_values->store_id ?? '',
@@ -175,16 +183,6 @@ class TelrPaymentController extends Controller
         CURLOPT_SSL_VERIFYPEER => false,
     ]);
     $raw = curl_exec($ch);
-    if (curl_errno($ch)) {
-        \Log::error('Telr check curl error', ['error' => curl_error($ch)]);
-        curl_close($ch);
-
-        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        if ($payment && function_exists($payment->failure_hook)) {
-            call_user_func($payment->failure_hook, $payment);
-        }
-        return $this->payment_response($payment, 'fail');
-    }
     curl_close($ch);
 
     $res = json_decode($raw, true);
@@ -198,18 +196,11 @@ class TelrPaymentController extends Controller
                 'is_paid'        => 1,
                 'transaction_id' => $ref,
             ]);
-            if (function_exists($payment->success_hook)) {
-                call_user_func($payment->success_hook, $payment);
-            }
         }
         return $this->payment_response($payment, 'success');
     }
 
-    $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-    if ($payment && function_exists($payment->failure_hook)) {
-        call_user_func($payment->failure_hook, $payment);
-    }
-    return $this->payment_response($payment, 'fail');
+    return $this->payment_response(null, 'fail');
 }
 
 }
