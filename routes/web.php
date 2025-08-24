@@ -136,13 +136,11 @@ if (!$is_published) {
             Route::post('make-payment', [MercadoPagoController::class, 'make_payment'])->name('make_payment');
         });
 
-       Route::group(['prefix' => 'telr', 'as' => 'telr.'], function () {
-    Route::get('pay', [TelrPaymentController::class, 'payment'])->name('pay');
-    Route::any('success', [TelrPaymentController::class, 'success'])
-        ->name('success')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-    Route::any('cancel', [TelrPaymentController::class, 'cancel'])
-        ->name('cancel')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-});
+      //TELR 
+      Route::group(['prefix' => 'telr', 'as' => 'telr.'], function () { Route::get('pay', [TelrPaymentController::class, 'payment'])->name('pay'); 
+        Route::any('success', [TelrPaymentController::class, 'success'])->name('success')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]); 
+        Route::any('cancel', [TelrPaymentController::class, 'cancel'])->name('cancel')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]); });
+
 
 
     });
