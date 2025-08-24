@@ -137,10 +137,11 @@ if (!$is_published) {
         });
 
       //TELR 
-    
-Route::get('/payment/telr/pay',     [TelrPaymentController::class,'payment'])->name('telr.pay');
-Route::get('/payment/telr/success', [TelrPaymentController::class,'success'])->name('telr.success');
-Route::get('/payment/telr/cancel',  [TelrPaymentController::class,'cancel'])->name('telr.cancel');
+      Route::group(['prefix' => 'telr', 'as' => 'telr.'], function () { Route::get('pay', [TelrPaymentController::class, 'payment'])->name('pay'); 
+        Route::any('success', [TelrPaymentController::class, 'success'])->name('success')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]); 
+        Route::any('cancel', [TelrPaymentController::class, 'cancel'])->name('cancel')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]); });
+
+
 
     });
 }
