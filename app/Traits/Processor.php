@@ -79,13 +79,49 @@ trait  Processor
         return $imageName;
     }
 
-    public function payment_response($payment_info, $payment_flag): Application|JsonResponse|Redirector|RedirectResponse|\Illuminate\Contracts\Foundation\Application
-    {
+    public function payment_response($payment_info, $payment_flag)
+{
+    try {
         $payment_info = PaymentRequest::find($payment_info->id);
-        $token_string = 'payment_method=' . $payment_info->payment_method . '&&attribute_id=' . $payment_info->attribute_id . '&&transaction_reference=' . $payment_info->transaction_id;
-        if (in_array($payment_info->payment_platform, ['web', 'app']) && $payment_info['external_redirect_link'] != null) {
-            return redirect($payment_info['external_redirect_link'] . '?flag=' . $payment_flag . '&&token=' . base64_encode($token_string));
+
+        if (!$payment_info) {
+            \Log::error("Telr Payment Response: PaymentRequest not found", [
+                'id' => $payment_info->id ?? null,
+                'flag' => $payment_flag
+            ]);
+            return response("<h1>Payment record not found.</h1>", 404);
         }
-        return redirect()->route('payment-' . $payment_flag, ['token' => base64_encode($token_string)]);
+
+        $token_string = 'payment_method=' . $payment_info->payment_method .
+            '&&attribute_id=' . $payment_info->attribute_id .
+            '&&transaction_reference=' . $payment_info->transaction_id;
+
+        // ✅ If external redirect
+        if (in_array($payment_info->payment_platform, ['web', 'app']) 
+            && $payment_info['external_redirect_link'] != null) {
+            return redirect($payment_info['external_redirect_link'] .
+                '?flag=' . $payment_flag .
+                '&&token=' . base64_encode($token_string));
+        }
+
+        // ✅ Check route exists
+        $routeName = 'payment-' . $payment_flag;
+        if (!\Route::has($routeName)) {
+            \Log::error("Telr Payment Response: Missing route", ['route' => $routeName]);
+            return response("<h1>Payment response route missing: $routeName</h1>", 500);
+        }
+
+        return redirect()->route($routeName, [
+            'token' => base64_encode($token_string)
+        ]);
+
+    } catch (\Exception $ex) {
+        \Log::error("Telr Payment Response Exception", [
+            'msg' => $ex->getMessage(),
+            'trace' => $ex->getTraceAsString(),
+        ]);
+        return response("<h1>Unexpected error in payment response.</h1>", 500);
     }
+}
+
 }

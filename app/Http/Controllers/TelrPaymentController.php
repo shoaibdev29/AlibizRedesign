@@ -62,24 +62,24 @@ class TelrPaymentController extends Controller
 
         // Build Telr create request
         $params = [
-            'ivp_method'   => 'create',
-            'ivp_store'    => $this->config_values->store_id ?? '',
-            'ivp_authkey'  => $this->config_values->auth_key ?? '',
-            'ivp_cart'     => substr(preg_replace('/[^A-Za-z0-9]/', '', (string)$data->id), 0, 32),
-            'ivp_test'     => ($this->mode === 'test') ? 1 : 0,                    // <- FIXED: use config mode
-            'ivp_amount'   => round((float)$data->payment_amount, 2),
+            'ivp_method' => 'create',
+            'ivp_store' => $this->config_values->store_id ?? '',
+            'ivp_authkey' => $this->config_values->auth_key ?? '',
+            'ivp_cart' => substr(preg_replace('/[^A-Za-z0-9]/', '', (string) $data->id), 0, 32),
+            'ivp_test' => ($this->mode === 'test') ? 1 : 0,                    // <- FIXED: use config mode
+            'ivp_amount' => round((float) $data->payment_amount, 2),
             'ivp_currency' => $data->currency_code ?: 'AED',                       // use your default ISO (AED/USD)
-            'ivp_desc'     => 'Payment ID: ' . $data->id,
+            'ivp_desc' => 'Payment ID: ' . $data->id,
             // Telr will redirect the customer here
-            'return_auth'  => route('telr.success'),
-            'return_decl'  => route('telr.cancel'),
-            'return_can'   => route('telr.cancel'),
+            'return_auth' => route('telr.success'),
+            'return_decl' => route('telr.cancel'),
+            'return_can' => route('telr.cancel'),
             // Optional billing fields
-            'bill_city'    => $data->customer_city ?? '',
+            'bill_city' => $data->customer_city ?? '',
             'bill_country' => $data->customer_country ?? '',
-            'bill_email'   => $data->customer_email ?? '',
-            'bill_fname'   => $data->customer_name ?? '',
-            'bill_title'   => 'Payment',
+            'bill_email' => $data->customer_email ?? '',
+            'bill_fname' => $data->customer_name ?? '',
+            'bill_title' => 'Payment',
         ];
 
         \Log::info('Telr create params', $params);
@@ -88,10 +88,10 @@ class TelrPaymentController extends Controller
         $ch = curl_init($this->base_url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query($params),
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-            CURLOPT_TIMEOUT        => 45,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($params),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT => 45,
             // In prod you should verify peer; keep false only if CA bundle not present
             CURLOPT_SSL_VERIFYPEER => false,
         ]);
@@ -117,99 +117,109 @@ class TelrPaymentController extends Controller
 
     /** Customer cancelled/declined */
     public function cancel(Request $request)
-{
-    // Telr may post back without payment_id; try cart id
-    $cartId  = $request->input('cartid', $request->input('cart_id'));
-    $payment = null;
+    {
+        // Telr may post back without payment_id; try cart id
+        $cartId = $request->input('cartid', $request->input('cart_id'));
+        $payment = null;
 
-    if ($cartId) {
-        // our ivp_cart is UUID without dashes
-        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
+        if ($cartId) {
+            // our ivp_cart is UUID without dashes
+            $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
+        }
+
+        if (!$payment && $request->filled('payment_id')) {
+            $payment = $this->payment::find($request['payment_id']);
+        }
+
+        return $this->payment_response($payment, 'cancel');
     }
-
-    if (!$payment && $request->filled('payment_id')) {
-        $payment = $this->payment::find($request['payment_id']);
-    }
-
-    return $this->payment_response($payment, 'cancel');
-}
 
 
     /** Customer returned from Telr; verify the order */
     public function success(Request $request)
-{
-    $ref    = $request->input('order_ref');
-    $cartId = $request->input('cartid', $request->input('cart_id'));
+    {
+        try {
+            // Telr sometimes sends `order_ref`, sometimes `OrderRef`
+            $ref = $request->input('order_ref') ?? $request->input('OrderRef');
+            // Telr sometimes sends `cartid`, sometimes `cart_id`
+            $cartId = $request->input('cartid') ?? $request->input('cart_id');
 
-    if (!$ref || !$cartId) {
-        \Log::warning('Telr return missing params', $request->all());
+            if (!$ref || !$cartId) {
+                \Log::warning('Telr return missing params', $request->all());
 
-        $payment = null;
-        if ($cartId) {
-            $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        } elseif ($request->filled('payment_id')) {
-            $payment = $this->payment::find($request['payment_id']);
-        }
+                $payment = null;
+                if ($cartId) {
+                    $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
+                } elseif ($request->filled('payment_id')) {
+                    $payment = $this->payment::find($request['payment_id']);
+                }
 
-        if ($payment && function_exists($payment->failure_hook)) {
-            call_user_func($payment->failure_hook, $payment);
-        }
-        return $this->payment_response($payment, 'fail');
-    }
+                if ($payment && $payment->failure_hook && function_exists($payment->failure_hook)) {
+                    call_user_func($payment->failure_hook, $payment);
+                }
 
-    // verify with Telr
-    $verify = [
-        'ivp_method'  => 'check',
-        'ivp_store'   => $this->config_values->store_id ?? '',
-        'ivp_authkey' => $this->config_values->auth_key ?? '',
-        'order_ref'   => $ref,
-    ];
-
-    $ch = curl_init($this->base_url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query($verify),
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-        CURLOPT_TIMEOUT        => 45,
-        CURLOPT_SSL_VERIFYPEER => false,
-    ]);
-    $raw = curl_exec($ch);
-    if (curl_errno($ch)) {
-        \Log::error('Telr check curl error', ['error' => curl_error($ch)]);
-        curl_close($ch);
-
-        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        if ($payment && function_exists($payment->failure_hook)) {
-            call_user_func($payment->failure_hook, $payment);
-        }
-        return $this->payment_response($payment, 'fail');
-    }
-    curl_close($ch);
-
-    $res = json_decode($raw, true);
-    \Log::info('Telr check response', ['raw' => $raw, 'json' => $res]);
-
-    if (!empty($res['order']['status']['code']) && (int)$res['order']['status']['code'] === 3) {
-        $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-        if ($payment) {
-            $payment->update([
-                'payment_method' => 'telr',
-                'is_paid'        => 1,
-                'transaction_id' => $ref,
-            ]);
-            if (function_exists($payment->success_hook)) {
-                call_user_func($payment->success_hook, $payment);
+                return $this->payment_response($payment, 'fail');
             }
+
+            // 🔒 Verify with Telr API
+            $verify = [
+                'ivp_method' => 'check',
+                'ivp_store' => $this->config_values->store_id ?? '',
+                'ivp_authkey' => $this->config_values->auth_key ?? '',
+                'order_ref' => $ref,
+            ];
+
+            $ch = curl_init("https://secure.telr.com/gateway/order.json");
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($verify));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+            $resp = curl_exec($ch);
+            $err = curl_error($ch);
+            curl_close($ch);
+
+            if ($err) {
+                \Log::error("Telr check error: " . $err);
+                return $this->payment_response(null, 'fail');
+            }
+
+            $result = json_decode($resp, true);
+
+            if (isset($result['order']['status']['code']) && $result['order']['status']['code'] == 3) {
+                // ✅ Payment successful
+                $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
+                if ($payment) {
+                    $payment->payment_status = 'success';
+                    $payment->transaction_id = $result['order']['transaction']['ref'] ?? null;
+                    $payment->save();
+
+                    if ($payment->success_hook && function_exists($payment->success_hook)) {
+                        call_user_func($payment->success_hook, $payment);
+                    }
+                }
+                return $this->payment_response($payment, 'success');
+            }
+
+            // ❌ Failed
+            $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
+            if ($payment) {
+                $payment->payment_status = 'fail';
+                $payment->transaction_id = $result['order']['transaction']['ref'] ?? null;
+                $payment->save();
+
+                if ($payment->failure_hook && function_exists($payment->failure_hook)) {
+                    call_user_func($payment->failure_hook, $payment);
+                }
+            }
+            return $this->payment_response($payment, 'fail');
+
+        } catch (\Exception $e) {
+            \Log::error("Telr success handler error: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all(),
+            ]);
+            return $this->payment_response(null, 'fail');
         }
-        return $this->payment_response($payment, 'success');
     }
 
-    $payment = $this->payment::whereRaw("REPLACE(id, '-', '') = ?", [$cartId])->first();
-    if ($payment && function_exists($payment->failure_hook)) {
-        call_user_func($payment->failure_hook, $payment);
-    }
-    return $this->payment_response($payment, 'fail');
-}
-////////ssdff/////
 }

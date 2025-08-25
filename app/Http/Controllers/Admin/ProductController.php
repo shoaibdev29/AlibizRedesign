@@ -153,7 +153,7 @@ class ProductController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function store(Request $request): JsonResponse
+   public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|unique:products',
@@ -187,7 +187,7 @@ class ProductController extends Controller
             $image_data = json_encode([]);
         }
 
-        $product= new Product;
+        $product = new Product;
         $product->name = $request->name[array_search('en', $request->lang)];
 
         $category = [];
@@ -238,6 +238,22 @@ class ProductController extends Controller
                 $options[] = explode(',', $my_str);
             }
         }
+
+        // Process color images if they exist
+        $colorImages = [];
+        if ($request->has('colors')) {
+            foreach ($request->colors as $colorIndex => $colorData) {
+                if (isset($colorData['images']) && is_array($colorData['images'])) {
+                    foreach ($colorData['images'] as $image) {
+                        if ($image && $image->isValid()) {
+                            $colorImageName = Helpers::upload('product/colors/', 'png', $image);
+                            $colorImages[$colorData['hex']][] = $colorImageName;
+                        }
+                    }
+                }
+            }
+        }
+
         //Generates the combinations of customer choice options
         $combinations = Helpers::combinations($options);
 
@@ -256,14 +272,23 @@ class ProductController extends Controller
                 $item['type'] = $str;
                 $item['price'] = abs($request['price_' . str_replace('.', '_', $str)]);
                 $item['stock'] = abs($request['stock_' . str_replace('.', '_', $str)]);
+
+                // Add color-specific images to the variation if it contains a color
+                foreach ($combination as $option) {
+                    $cleanOption = str_replace(' ', '', $option);
+                    if (isset($colorImages[$cleanOption])) {
+                        $item['images'] = $colorImages[$cleanOption];
+                    }
+                }
+
                 $variations[] = $item;
                 $stockCount += $item['stock'];
             }
         } else {
-            $stockCount = (integer)$request['total_stock'];
+            $stockCount = (integer) $request['total_stock'];
         }
 
-        if ((integer)$request['total_stock'] != $stockCount) {
+        if ((integer) $request['total_stock'] != $stockCount) {
             $validator->getMessageBag()->add('total_stock', 'Stock calculation mismatch!');
         }
 

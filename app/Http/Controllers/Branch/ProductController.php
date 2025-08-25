@@ -153,166 +153,191 @@ class ProductController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function store(Request $request): JsonResponse
-    {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|unique:products',
-            'category_id' => 'required',
-            'images' => 'required',
-            'total_stock' => 'required|numeric|min:1',
-            'price' => 'required|numeric|min:1',
-        ], [
-            'name.required' => 'Product name is required!',
-            'category_id.required' => 'category  is required!',
-        ]);
+ public function store(Request $request): JsonResponse
+{
+    $validator = Validator::make($request->all(), [
+        'name' => 'required|unique:products',
+        'category_id' => 'required',
+        'images' => 'required',
+        'total_stock' => 'required|numeric|min:1',
+        'price' => 'required|numeric|min:1',
+    ], [
+        'name.required' => 'Product name is required!',
+        'category_id.required' => 'category  is required!',
+    ]);
 
-        if ($request['discount_type'] == 'percent') {
-            $discount = ($request['price'] / 100) * $request['discount'];
-        } else {
-            $discount = $request['discount'];
+    if ($request['discount_type'] == 'percent') {
+        $discount = ($request['price'] / 100) * $request['discount'];
+    } else {
+        $discount = $request['discount'];
+    }
+
+    if ($request['price'] <= $discount) {
+        $validator->getMessageBag()->add('unit_price', 'Discount can not be more or equal to the price!');
+    }
+
+    $imageName = [];
+    if (!empty($request->file('images'))) {
+        foreach ($request->images as $img) {
+            $image_data = Helpers::upload('product/', 'png', $img);
+            $imageName[] = $image_data;
         }
+        $image_data = json_encode($imageName);
+    } else {
+        $image_data = json_encode([]);
+    }
 
-        if ($request['price'] <= $discount) {
-            $validator->getMessageBag()->add('unit_price', 'Discount can not be more or equal to the price!');
-        }
+    $product = new BranchProduct;
+    $product->name = $request->name[array_search('en', $request->lang)];
 
-        $imageName = [];
-        if (!empty($request->file('images'))) {
-            foreach ($request->images as $img) {
-                $image_data = Helpers::upload('product/', 'png', $img);
-                $imageName[] = $image_data;
+    $category = [];
+    if ($request->category_id != null) {
+        $category[] = [
+            'id' => $request->category_id,
+            'position' => 1,
+        ];
+    }
+    if ($request->sub_category_id != null) {
+        $category[] = [
+            'id' => $request->sub_category_id,
+            'position' => 2,
+        ];
+    }
+    if ($request->sub_sub_category_id != null) {
+        $category[] = [
+            'id' => $request->sub_sub_category_id,
+            'position' => 3,
+        ];
+    }
+
+    $product->category_ids = json_encode($category);
+    $product->description = $request->description[array_search('en', $request->lang)];
+
+    $choiceOptions = [];
+    if ($request->has('choice')) {
+        foreach ($request->choice_no as $key => $no) {
+            $str = 'choice_options_' . $no;
+            if ($request[$str][0] == null) {
+                $validator->getMessageBag()->add('name', 'Attribute choice option values can not be null!');
+                return response()->json(['errors' => Helpers::error_processor($validator)]);
             }
-            $image_data = json_encode($imageName);
-        } else {
-            $image_data = json_encode([]);
+            $item['name'] = 'choice_' . $no;
+            $item['title'] = $request->choice[$key];
+            $item['options'] = explode(',', implode('|', preg_replace('/\s+/', ' ', $request[$str])));
+            $choiceOptions[] = $item;
         }
+    }
 
-        $product= new BranchProduct;
-        $product->name = $request->name[array_search('en', $request->lang)];
-
-        $category = [];
-        if ($request->category_id != null) {
-            $category[] = [
-                'id' => $request->category_id,
-                'position' => 1,
-            ];
+    $product->choice_options = json_encode($choiceOptions);
+    $variations = [];
+    $options = [];
+    if ($request->has('choice_no')) {
+        foreach ($request->choice_no as $key => $no) {
+            $name = 'choice_options_' . $no;
+            $my_str = implode('|', $request[$name]);
+            $options[] = explode(',', $my_str);
         }
-        if ($request->sub_category_id != null) {
-            $category[] = [
-                'id' => $request->sub_category_id,
-                'position' => 2,
-            ];
-        }
-        if ($request->sub_sub_category_id != null) {
-            $category[] = [
-                'id' => $request->sub_sub_category_id,
-                'position' => 3,
-            ];
-        }
+    }
 
-        $product->category_ids = json_encode($category);
-        $product->description = $request->description[array_search('en', $request->lang)];
-
-        $choiceOptions = [];
-        if ($request->has('choice')) {
-            foreach ($request->choice_no as $key => $no) {
-                $str = 'choice_options_' . $no;
-                if ($request[$str][0] == null) {
-                    $validator->getMessageBag()->add('name', 'Attribute choice option values can not be null!');
-                    return response()->json(['errors' => Helpers::error_processor($validator)]);
-                }
-                $item['name'] = 'choice_' . $no;
-                $item['title'] = $request->choice[$key];
-                $item['options'] = explode(',', implode('|', preg_replace('/\s+/', ' ', $request[$str])));
-                $choiceOptions[] = $item;
-            }
-        }
-
-        $product->choice_options = json_encode($choiceOptions);
-        $variations = [];
-        $options = [];
-        if ($request->has('choice_no')) {
-            foreach ($request->choice_no as $key => $no) {
-                $name = 'choice_options_' . $no;
-                $my_str = implode('|', $request[$name]);
-                $options[] = explode(',', $my_str);
-            }
-        }
-        //Generates the combinations of customer choice options
-        $combinations = Helpers::combinations($options);
-
-        $stockCount = 0;
-        if (count($combinations[0]) > 0) {
-            foreach ($combinations as $key => $combination) {
-                $str = '';
-                foreach ($combination as $k => $item) {
-                    if ($k > 0) {
-                        $str .= '-' . str_replace(' ', '', $item);
-                    } else {
-                        $str .= str_replace(' ', '', $item);
+    // Process color images if they exist
+    $colorImages = [];
+    if ($request->has('colors')) {
+        foreach ($request->colors as $colorIndex => $colorData) {
+            if (isset($colorData['images']) && is_array($colorData['images'])) {
+                foreach ($colorData['images'] as $image) {
+                    if ($image && $image->isValid()) {
+                        $colorImageName = Helpers::upload('product/colors/', 'png', $image);
+                        $colorImages[$colorData['hex']][] = $colorImageName;
                     }
                 }
-                $item = [];
-                $item['type'] = $str;
-                $item['price'] = abs($request['price_' . str_replace('.', '_', $str)]);
-                $item['stock'] = abs($request['stock_' . str_replace('.', '_', $str)]);
-                $variations[] = $item;
-                $stockCount += $item['stock'];
-            }
-        } else {
-            $stockCount = (integer)$request['total_stock'];
-        }
-
-        if ((integer)$request['total_stock'] != $stockCount) {
-            $validator->getMessageBag()->add('total_stock', 'Stock calculation mismatch!');
-        }
-
-        if ($validator->getMessageBag()->count() > 0) {
-            return response()->json(['errors' => Helpers::error_processor($validator)]);
-        }
-
-        //combinations end
-        $product->variations = json_encode($variations);
-        $product->price = $request->price;
-        $product->unit = $request->unit;
-        $product->image = $image_data;
-
-        $product->tax = $request->tax_type == 'amount' ? $request->tax : $request->tax;
-        $product->tax_type = $request->tax_type;
-
-        $product->discount = $request->discount_type == 'amount' ? $request->discount : $request->discount;
-        $product->discount_type = $request->discount_type;
-        $product->total_stock = $request->total_stock;
-
-        $product->attributes = $request->has('attribute_id') ? json_encode($request->attribute_id) : json_encode([]);
-        $product->save();
-
-        $data = [];
-        foreach ($request->lang as $index => $key) {
-            if ($request->name[$index] && $key != 'en') {
-                $data[] = array(
-                    'translationable_type' => BranchProduct::class,
-                    'translationable_id' => $product->id,
-                    'locale' => $key,
-                    'key' => 'name',
-                    'value' => $request->name[$index],
-                );
-            }
-            if ($request->description[$index] && $key != 'en') {
-                $data[] = array(
-                    'translationable_type' => BranchProduct::class,
-                    'translationable_id' => $product->id,
-                    'locale' => $key,
-                    'key' => 'description',
-                    'value' => $request->description[$index],
-                );
             }
         }
-
-        $this->translation->insert($data);
-
-        return response()->json([], 200);
     }
+
+    //Generates the combinations of customer choice options
+    $combinations = Helpers::combinations($options);
+
+    $stockCount = 0;
+    if (count($combinations[0]) > 0) {
+        foreach ($combinations as $key => $combination) {
+            $str = '';
+            foreach ($combination as $k => $item) {
+                if ($k > 0) {
+                    $str .= '-' . str_replace(' ', '', $item);
+                } else {
+                    $str .= str_replace(' ', '', $item);
+                }
+            }
+            $item = [];
+            $item['type'] = $str;
+            $item['price'] = abs($request['price_' . str_replace('.', '_', $str)]);
+            $item['stock'] = abs($request['stock_' . str_replace('.', '_', $str)]);
+
+            // Add color-specific images to the variation if it contains a color
+            foreach ($combination as $option) {
+                $cleanOption = str_replace(' ', '', $option);
+                if (isset($colorImages[$cleanOption])) {
+                    $item['images'] = $colorImages[$cleanOption];
+                }
+            }
+
+            $variations[] = $item;
+            $stockCount += $item['stock'];
+        }
+    } else {
+        $stockCount = (integer) $request['total_stock'];
+    }
+
+    if ((integer) $request['total_stock'] != $stockCount) {
+        $validator->getMessageBag()->add('total_stock', 'Stock calculation mismatch!');
+    }
+
+    if ($validator->getMessageBag()->count() > 0) {
+        return response()->json(['errors' => Helpers::error_processor($validator)]);
+    }
+
+    //combinations end
+    $product->variations = json_encode($variations);
+    $product->price = $request->price;
+    $product->unit = $request->unit;
+    $product->image = $image_data;
+
+    $product->tax = $request->tax_type == 'amount' ? $request->tax : $request->tax;
+    $product->tax_type = $request->tax_type;
+
+    $product->discount = $request->discount_type == 'amount' ? $request->discount : $request->discount;
+    $product->discount_type = $request->discount_type;
+    $product->total_stock = $request->total_stock;
+
+    $product->attributes = $request->has('attribute_id') ? json_encode($request->attribute_id) : json_encode([]);
+    $product->save();
+
+    $data = [];
+    foreach ($request->lang as $index => $key) {
+        if ($request->name[$index] && $key != 'en') {
+            $data[] = array(
+                'translationable_type' => BranchProduct::class,
+                'translationable_id' => $product->id,
+                'locale' => $key,
+                'key' => 'name',
+                'value' => $request->name[$index],
+            );
+        }
+        if ($request->description[$index] && $key != 'en') {
+            $data[] = array(
+                'translationable_type' => BranchProduct::class,
+                'translationable_id' => $product->id,
+                'locale' => $key,
+                'key' => 'description',
+                'value' => $request->description[$index],
+            );
+        }
+    }
+
+    $this->translation->insert($data);
+
+    return response()->json([], 200);
+}
 
     /**
      * @param $id
