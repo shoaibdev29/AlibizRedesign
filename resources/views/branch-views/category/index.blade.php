@@ -6,7 +6,7 @@
     <div class="content container-fluid">
         <div class="mb-3">
             <h2 class="text-capitalize mb-0 d-flex align-items-center gap-2">
-                <img width="20" src="{{asset('public/assets/admin/img/icons/brand-setup.png')}}" alt="{{ translate('image') }}">
+                <img width="20" src="{{asset('assets/admin/img/icons/brand-setup.png')}}" alt="{{ translate('image') }}">
                 {{translate('category_Setup')}}
             </h2>
         </div>
@@ -56,7 +56,7 @@
                                         <div class="upload-file">
                                             <input type="file" name="image" id="category-image" accept=".jpg,.png,.jpeg,.gif,.bmp,.tif,.tiff|image/*" class="upload-file__input" required>
                                             <div class="upload-file__img">
-                                                <img width="150" id="category-image-viewer" src="{{ asset('public/assets/admin/img/icons/upload_img.png') }}" alt="{{ translate('category') }}">
+                                                <img width="150" id="category-image-viewer" src="{{ asset('assets/admin/img/icons/upload_img.png') }}" alt="{{ translate('category') }}">
                                             </div>
                                         </div>
                                         <p class="fs-16 mb-2 text-dark mt-2">{{ translate('Images Ratio') }} 1:1</p>
@@ -69,7 +69,7 @@
                                         <div class="upload-file">
                                             <input type="file" name="banner_image" id="banner-image" accept=".jpg,.png,.jpeg,.gif,.bmp,.tif,.tiff|image/*" class="upload-file__input">
                                             <div class="upload-file__img">
-                                                <img width="150" id="banner-image-viewer" src="{{ asset('public/assets/admin/img/icons/upload_img.png') }}" alt="{{ translate('banner') }}">
+                                                <img width="150" id="banner-image-viewer" src="{{ asset('assets/admin/img/icons/upload_img.png') }}" alt="{{ translate('banner') }}">
                                             </div>
                                         </div>
                                         <p class="fs-16 mb-2 text-dark mt-2">{{ translate('Banner Images Ratio') }} 8:1</p>
@@ -184,7 +184,7 @@
             </div>
             @if(count($categories)==0)
                 <div class="text-center p-4">
-                    <img class="mb-3 width-7rem" src="{{asset('public/assets/admin/svg/illustrations/sorry.svg')}}" alt="{{ translate('Image Description') }}">
+                    <img class="mb-3 width-7rem" src="{{asset('assets/admin/svg/illustrations/sorry.svg')}}" alt="{{ translate('Image Description') }}">
                     <p class="mb-0">{{ translate('No data to show') }}</p>
                 </div>
             @endif

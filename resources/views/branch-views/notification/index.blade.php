@@ -6,7 +6,7 @@
     <div class="content container-fluid">
         <div class="mb-3">
             <h2 class="text-capitalize mb-0 d-flex align-items-center gap-2">
-                <img width="20" src="{{ asset('public/assets/admin/img/icons/notification.png') }}"
+                <img width="20" src="{{ asset('assets/admin/img/icons/notification.png') }}"
                     alt="{{ translate('notification') }}">
                 {{ translate('notification') }}
             </h2>
@@ -42,7 +42,7 @@
                                             required>
                                         <div class="upload-file__img">
                                             <img width="150" id="viewer"
-                                                src="{{ asset('public/assets/admin/img/icons/upload_img.png') }}"
+                                                src="{{ asset('assets/admin/img/icons/upload_img.png') }}"
                                                 alt="{{ translate('notification') }}">
                                         </div>
                                     </div>
@@ -106,12 +106,12 @@
                                 <td>
                                     @php
                                         // Use the image_url accessor from the model
-                                        $imageUrl = $notification->image_url ?? asset('public/assets/admin/img/icons/upload_img.png');
+                                        $imageUrl = $notification->image_url ?? asset('assets/admin/img/icons/upload_img.png');
                                     @endphp
 
                                     <div class="avatar-lg border rounded">
                                         <img class="img-fit rounded" src="{{ $imageUrl }}"
-                                            onerror="this.src='{{ asset('public/assets/admin/img/icons/upload_img.png') }}'"
+                                            onerror="this.src='{{ asset('assets/admin/img/icons/upload_img.png') }}'"
                                             alt="{{ translate('image') }}">
                                     </div>
                                 </td>
@@ -158,7 +158,7 @@
 
             @if(count($notifications) == 0)
                 <div class="text-center p-4">
-                    <img class="mb-3 width-7rem" src="{{ asset('public/assets/admin/svg/illustrations/sorry.svg') }}"
+                    <img class="mb-3 width-7rem" src="{{ asset('assets/admin/svg/illustrations/sorry.svg') }}"
                         alt="{{ translate('image') }}">
                     <p class="mb-0">{{ translate('No data to show') }}</p>
                 </div>
@@ -215,7 +215,7 @@
                 }
                 reader.readAsDataURL(input.files[0]);
             } else {
-                $('#viewer').attr('src', '{{ asset("public/assets/admin/img/icons/upload_img.png") }}');
+                $('#viewer').attr('src', '{{ asset("assets/admin/img/icons/upload_img.png") }}');
             }
         });
     </script>

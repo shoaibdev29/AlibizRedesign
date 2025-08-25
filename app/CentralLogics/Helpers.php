@@ -309,7 +309,7 @@ class Helpers
 
     public static function send_push_notif_to_topic($data, $type)
     {
-        $image = asset('storage/app/public/notification') . '/' . $data['image'];
+        $image = asset('storage/app/notification') . '/' . $data['image'];
 
         $postData = [
             'message' => [

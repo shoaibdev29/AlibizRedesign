@@ -6,7 +6,7 @@
 <div class="content container-fluid">
     <div class="mb-3">
         <h2 class="text-capitalize mb-0 d-flex align-items-center gap-2">
-            <img width="16" src="{{ asset('public/assets/admin/img/icons/flash-sale.png') }}" alt="{{ translate('flash') }}">
+            <img width="16" src="{{ asset('assets/admin/img/icons/flash-sale.png') }}" alt="{{ translate('flash') }}">
             {{ translate('Flash Sale') }}
         </h2>
     </div>
@@ -137,7 +137,7 @@
 
         @if(count($flashSales) == 0)
         <div class="text-center p-4">
-            <img class="mb-3 width-7rem" src="{{ asset('public/assets/admin/svg/illustrations/sorry.svg') }}" alt="Image">
+            <img class="mb-3 width-7rem" src="{{ asset('assets/admin/svg/illustrations/sorry.svg') }}" alt="Image">
             <p class="mb-0">{{ translate('No data to show') }}</p>
         </div>
         @endif

@@ -26,9 +26,9 @@
                                 <div class="row">
                                     @foreach(json_decode($con->attachment) as $image)
                                         <div class="col-12 @if(count(json_decode($con->attachment)) > 1) col-md-6 @endif">
-                                            <a href="{{asset('storage/app/public/branch_conversation/' . $image)}}" data-lightbox>
+                                            <a href="{{asset('storage/app/branch_conversation/' . $image)}}" data-lightbox>
                                                 <img class="__img-120"
-                                                    src="{{asset('storage/app/public/branch_conversation/' . $image)}}" alt="Image">
+                                                    src="{{asset('storage/app/branch_conversation/' . $image)}}" alt="Image">
                                             </a>
                                         </div>
                                     @endforeach
@@ -48,9 +48,9 @@
                                 <div class="row">
                                     @foreach(json_decode($con->attachment) as $image)
                                         <div class="col-12 @if(count(json_decode($con->attachment)) > 1) col-md-6 @endif">
-                                            <a href="{{asset('storage/app/public/branch_conversation/' . $image)}}" data-lightbox>
+                                            <a href="{{asset('storage/app/branch_conversation/' . $image)}}" data-lightbox>
                                                 <img class="__img-120"
-                                                    src="{{asset('storage/app/public/branch_conversation/' . $image)}}" alt="Image">
+                                                    src="{{asset('storage/app/branch_conversation/' . $image)}}" alt="Image">
                                             </a>
                                         </div>
                                     @endforeach
@@ -88,8 +88,8 @@
     </div>
 </form>
 
-<script src="{{asset('public/assets/admin/js/tags-input.min.js')}}"></script>
-<script src="{{asset('public/assets/admin/js/spartan-multi-image-picker.js')}}"></script>
+<script src="{{asset('assets/admin/js/tags-input.min.js')}}"></script>
+<script src="{{asset('assets/admin/js/spartan-multi-image-picker.js')}}"></script>
 
 <script>
 

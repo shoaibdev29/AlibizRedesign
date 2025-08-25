@@ -7,7 +7,7 @@
         <!-- Add New Banner Form Section -->
         <div class="mb-3">
             <h2 class="text-capitalize mb-0 d-flex align-items-center gap-2">
-                <img width="24" src="{{asset('public/assets/admin/img/icons/banner.png')}}" alt="{{ translate('banner') }}">
+                <img width="24" src="{{asset('assets/admin/img/icons/banner.png')}}" alt="{{ translate('banner') }}">
                 {{translate('add_new_banner')}}
             </h2>
         </div>
@@ -60,7 +60,7 @@
                                 <div class="branch-upload-area ratio-2-1" id="primary-upload-area">
                                     <input type="file" name="primary_image" id="primary-image" class="branch-file-input" accept=".jpg,.png,.jpeg,.gif,.bmp,.tif,.tiff|image/*" required>
                                     <label for="primary-image" class="branch-upload-label">
-                                        <img id="primary-image-preview" src="{{ asset('public/assets/admin/img/icons/upload_img.png') }}" 
+                                        <img id="primary-image-preview" src="{{ asset('assets/admin/img/icons/upload_img.png') }}" 
                                              class="branch-image-preview" alt="{{ translate('banner preview') }}">
                                         <div class="branch-upload-text">
                                             <h3>{{ translate('Drag & Drop here') }}</h3>
@@ -85,7 +85,7 @@
                                 <div class="branch-upload-area ratio-1-1" id="secondary-upload-area">
                                     <input type="file" name="secondary_image" id="secondary-image" class="branch-file-input" accept=".jpg,.png,.jpeg,.gif,.bmp,.tif,.tiff|image/*">
                                     <label for="secondary-image" class="branch-upload-label">
-                                        <img id="secondary-image-preview" src="{{ asset('public/assets/admin/img/icons/upload_img.png') }}" 
+                                        <img id="secondary-image-preview" src="{{ asset('assets/admin/img/icons/upload_img.png') }}" 
                                              class="branch-image-preview" alt="{{ translate('banner preview') }}">
                                         <div class="branch-upload-text">
                                             <h3>{{ translate('Drag & Drop here') }}</h3>
@@ -200,7 +200,7 @@
             </div>
             @if(count($banners)==0)
                 <div class="text-center p-4">
-                    <img class="mb-3 width-7rem" src="{{asset('public/assets/admin/svg/illustrations/sorry.svg')}}" alt="{{ translate('Image Description') }}">
+                    <img class="mb-3 width-7rem" src="{{asset('assets/admin/svg/illustrations/sorry.svg')}}" alt="{{ translate('Image Description') }}">
                     <p class="mb-0">{{ translate('No data to show') }}</p>
                 </div>
             @endif
@@ -325,7 +325,7 @@ function initImageUpload(inputId, previewId, areaId) {
     if(removeBtn) {
         removeBtn.addEventListener('click', function() {
             input.value = '';
-            preview.src = '{{ asset("public/assets/admin/img/icons/upload_img.png") }}';
+            preview.src = '{{ asset("assets/admin/img/icons/upload_img.png") }}';
             area.classList.remove('has-image');
             this.classList.add('d-none');
         });
