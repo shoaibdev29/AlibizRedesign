@@ -24,21 +24,41 @@ class Product extends Model
 
     protected $appends = ['image_fullpath'];
 
-    public function getImageFullPathAttribute()
-    {
-        $value = $this->image ?? [];
-        $imageUrlArray = is_array($value) ? $value : json_decode($value, true);
-        if (is_array($imageUrlArray)) {
-            foreach ($imageUrlArray as $key => $item) {
-                if (Storage::disk('public')->exists('product/' . $item)) {
-                    $imageUrlArray[$key] = asset('storage/app/public/product/'. $item) ;
-                } else {
-                    $imageUrlArray[$key] = asset('public/assets/admin/img/160x160/img2.jpg');
-                }
-            }
-        }
-        return $imageUrlArray;
+   public function getImageFullPathAttribute()
+{
+    $value = $this->image ?? [];
+    $images = is_array($value) ? $value : json_decode($value, true);
+
+    if (!is_array($images) || empty($images)) {
+        // single safe fallback
+        return [asset('assets/admin/img/160x160/img2.jpg')];
     }
+
+    foreach ($images as $key => $item) {
+        if (empty($item)) {
+            $images[$key] = asset('assets/admin/img/160x160/img2.jpg');
+            continue;
+        }
+
+        // if already a full URL, keep it
+        if (preg_match('/^https?:\/\//i', $item)) {
+            $images[$key] = $item;
+            continue;
+        }
+
+        // storage file exists?
+        if (Storage::disk('public')->exists('product/'.$item)) {
+            // makes /storage/product/filename.jpg
+            $images[$key] = Storage::url('product/'.$item);
+        } else {
+            // fallback (NO "public/" prefix here)
+            $images[$key] = asset('assets/admin/img/160x160/img2.jpg');
+        }
+    }
+
+    return $images;
+}
+
 
     public function translations(): \Illuminate\Database\Eloquent\Relations\MorphMany
     {
