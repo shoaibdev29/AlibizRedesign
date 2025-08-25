@@ -23,16 +23,31 @@ class Branch extends Authenticatable
         return $query->where('status', '=', 1);
     }
 
-    public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img2.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
 
-        if (!is_null($image) && Storage::disk('public')->exists('branch/' . $image)) {
-            $path = asset('storage/app/public/branch/' . $image);
-        }
-        return $path;
+    // fallback (no "public/" prefix)
+    $fallback = asset('assets/admin/img/160x160/img2.jpg');
+
+    if (empty($image)) {
+        return $fallback;
     }
+
+    // agar DB me already full URL hai (e.g., http://... ya https://...), to as-is return karo
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    // check if file exists in storage
+    if (Storage::disk('public')->exists('branch/'.$image)) {
+        // Storage::url() automatically maps to /storage/branch/filename
+        return Storage::url('branch/'.$image);
+    }
+
+    return $fallback;
+}
+
 
     public function delivery_charge_setup()
     {

@@ -13,14 +13,16 @@ class Admin extends Authenticatable
     protected $appends = ['image_fullpath'];
 
     public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img1.jpg');
+{
+    $image = $this->image ?? null;
+    $fallback = asset('assets/admin/img/160x160/img1.jpg');
 
-        if (!is_null($image) && Storage::disk('public')->exists('admin/' . $image)) {
-            $path = asset('storage/app/public/admin/' . $image);
-        }
-        return $path;
-    }
+    if (empty($image)) return $fallback;
+    if (preg_match('/^https?:\/\//i', $image)) return $image;
+
+    return Storage::disk('public')->exists('admin/'.$image)
+        ? asset('storage/admin/'.$image)   // ✅ not storage/app/public
+        : $fallback;
+}
 
 }

@@ -21,21 +21,33 @@ class BranchBanner extends Model
 
     protected $appends = ['image_fullpath'];
 
-    public function getImageFullPathAttribute()
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img2.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
 
-        if (!is_null($image)) {
-            // Use consistent storage path for branch banners
-            $storagePath = 'branch/banner/' . $image;
-            
-            if (Storage::disk('public')->exists($storagePath)) {
-                $path = asset('storage/app/public/' . $storagePath);
-            }
-        }
-        
-        return $path;
+    // fallback (NO "public/" prefix)
+    $fallback = asset('assets/admin/img/160x160/img2.jpg');
+
+    if (empty($image)) {
+        return $fallback;
     }
+
+    // already an absolute URL? (CDN/S3 etc.)
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    // consistent storage path for branch banners
+    $storagePath = 'branch/banner/' . ltrim($image, '/');
+
+    // check on the "public" disk (maps to storage/app/public)
+    if (Storage::disk('public')->exists($storagePath)) {
+        // public URL via symlink -> /storage/branch/banner/...
+        return Storage::url($storagePath);
+    }
+
+    return $fallback;
+}
+
 }
 ?>
