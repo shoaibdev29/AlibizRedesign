@@ -41,16 +41,29 @@ class User extends Authenticatable
 
     protected $appends = ['image_fullpath'];
 
-    public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img1.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
+    $fallback = asset('assets/admin/img/160x160/img1.jpg');
 
-        if (!is_null($image) && Storage::disk('public')->exists('profile/' . $image)) {
-            $path = asset('storage/app/public/profile/' . $image);
-        }
-        return $path;
+    if (empty($image)) {
+        return $fallback;
     }
+
+    // if already an absolute URL (http/https), return as-is
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    $storagePath = 'profile/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath); // ✅ /storage/profile/filename.jpg
+    }
+
+    return $fallback;
+}
+
 
     public function orders(){
         return $this->hasMany(Order::class,'user_id');

@@ -14,32 +14,62 @@ class DeliveryMan extends Authenticatable
 
     protected $appends = ['image_fullpath', 'identity_image_fullpath'];
 
-    public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img1.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
+    $fallback = asset('assets/admin/img/160x160/img1.jpg');
 
-        if (!is_null($image) && Storage::disk('public')->exists('delivery-man/' . $image)) {
-            $path = asset('storage/app/public/delivery-man/' . $image);
-        }
-        return $path;
+    if (empty($image)) {
+        return $fallback;
     }
 
-    public function getIdentityImageFullPathAttribute()
-    {
-        $value = $this->identity_image ?? [];
-        $imageUrlArray = is_array($value) ? $value : json_decode($value, true);
-        if (is_array($imageUrlArray)) {
-            foreach ($imageUrlArray as $key => $item) {
-                if (Storage::disk('public')->exists('delivery-man/' . $item)) {
-                    $imageUrlArray[$key] = asset('storage/app/public/delivery-man/'. $item) ;
-                } else {
-                    $imageUrlArray[$key] = asset('public/assets/admin/img/400x400/img2.jpg');
-                }
-            }
-        }
-        return $imageUrlArray;
+    // agar full URL (http/https) already stored ho
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
     }
+
+    $storagePath = 'delivery-man/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath); // => /storage/delivery-man/filename.jpg
+    }
+
+    return $fallback;
+}
+
+public function getIdentityImageFullPathAttribute()
+{
+    $value = $this->identity_image ?? [];
+    $images = is_array($value) ? $value : json_decode($value, true);
+
+    if (!is_array($images) || empty($images)) {
+        return [asset('assets/admin/img/400x400/img2.jpg')];
+    }
+
+    foreach ($images as $key => $item) {
+        if (empty($item)) {
+            $images[$key] = asset('assets/admin/img/400x400/img2.jpg');
+            continue;
+        }
+
+        // agar already absolute URL hai (CDN, S3, etc.)
+        if (preg_match('/^https?:\/\//i', $item)) {
+            $images[$key] = $item;
+            continue;
+        }
+
+        $storagePath = 'delivery-man/' . ltrim($item, '/');
+
+        if (Storage::disk('public')->exists($storagePath)) {
+            $images[$key] = Storage::url($storagePath); // => /storage/delivery-man/filename.png
+        } else {
+            $images[$key] = asset('assets/admin/img/400x400/img2.jpg');
+        }
+    }
+
+    return $images;
+}
+
 
     public function reviews(): \Illuminate\Database\Eloquent\Relations\HasMany
     {

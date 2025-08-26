@@ -21,14 +21,28 @@ class Notification extends Model
 
     protected $appends = ['image_fullpath'];
 
-    public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img1.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
+    $fallback = asset('assets/admin/img/160x160/img1.jpg');
 
-        if (!is_null($image) && Storage::disk('public')->exists('notification/' . $image)) {
-            $path = asset('storage/app/public/notification/' . $image);
-        }
-        return $path;
+    if (empty($image)) {
+        return $fallback;
     }
+
+    // agar DB me already full URL ho (http/https), to as-is return kare
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    $storagePath = 'notification/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        // sahi public URL => /storage/notification/filename.jpg
+        return Storage::url($storagePath);
+    }
+
+    return $fallback;
+}
+
 }

@@ -47,27 +47,56 @@ class BranchCategory extends Model
     protected $appends = ['image_fullpath', 'banner_image_fullpath'];
 
     // In BranchCategory model
-    public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img2.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
 
-        if (!is_null($image) && Storage::disk('public')->exists('branch-category/' . $image)) {
-            $path = asset('storage/app/public/branch-category/' . $image);
-        }
-        return $path;
+    // fallback (no "public/")
+    $fallback = asset('assets/admin/img/160x160/img2.jpg');
+
+    if (empty($image)) {
+        return $fallback;
     }
 
-    public function getBannerImageFullPathAttribute(): string
-    {
-        $image = $this->banner_image ?? null;
-        $path = asset('public/assets/admin/img/8_1.png');
-
-        if (!is_null($image) && Storage::disk('public')->exists('branch-category/banner/' . $image)) {
-            $path = asset('storage/app/public/branch-category/banner/' . $image); // ✅ correct path
-        }
-        return $path;
+    // full URL in DB? return as-is
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
     }
+
+    $storagePath = 'branch-category/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath);   // => /storage/branch-category/filename.jpg
+    }
+
+    return $fallback;
+}
+
+public function getBannerImageFullPathAttribute(): string
+{
+    $image = $this->banner_image ?? null;
+
+    // fallback (no "public/")
+    $fallback = asset('assets/admin/img/8_1.png');
+
+    if (empty($image)) {
+        return $fallback;
+    }
+
+    // full URL? return as-is
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    $storagePath = 'branch-category/banner/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath);   // => /storage/branch-category/banner/filename.png
+    }
+
+    return $fallback;
+}
+
 
 
 

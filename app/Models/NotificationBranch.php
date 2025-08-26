@@ -22,21 +22,28 @@ class NotificationBranch extends Model
      * Always return a correct public URL for the image.
      * Works whether DB has full path or just filename.
      */
-    public function getImageUrlAttribute()
-    {
-        if (!$this->image) {
-            return asset('public/assets/admin/img/icons/upload_img.png');
-        }
+   public function getImageUrlAttribute()
+{
+    $fallback = asset('assets/admin/img/icons/upload_img.png');
 
-        $path = asset('storage/app/public/notification/' . $this->image);
-
-        // Verify file exists (optional)
-        if (!Storage::disk('public')->exists('notification/' . $this->image)) {
-            return asset('public/assets/admin/img/icons/upload_img.png');
-        }
-
-        return $path;
+    if (empty($this->image)) {
+        return $fallback;
     }
+
+    // agar DB me already full URL ho (http/https), to use it directly
+    if (preg_match('/^https?:\/\//i', $this->image)) {
+        return $this->image;
+    }
+
+    $storagePath = 'notification/' . ltrim($this->image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath); // => /storage/notification/filename.png
+    }
+
+    return $fallback;
+}
+
 
     // Add this for backward compatibility
     public function getImageFullpathAttribute()

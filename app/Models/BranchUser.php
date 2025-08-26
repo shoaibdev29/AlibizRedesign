@@ -38,16 +38,31 @@ class BranchUser extends Authenticatable
     protected $appends = ['image_fullpath'];
 
     public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img1.jpg');
+{
+    $image = $this->image ?? null;
 
-        if (!is_null($image) && Storage::disk('public')->exists('profile/' . $image)) {
-            $path = asset('storage/app/public/profile/' . $image);
-        }
+    // fallback (no "public/" prefix here)
+    $fallback = asset('assets/admin/img/160x160/img1.jpg');
 
-        return $path;
+    if (empty($image)) {
+        return $fallback;
     }
+
+    // agar DB me already full URL hai (http/https), use it directly
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    $storagePath = 'profile/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        // correct public URL => /storage/profile/filename.jpg
+        return Storage::url($storagePath);
+    }
+
+    return $fallback;
+}
+
 
     public function orders()
     {

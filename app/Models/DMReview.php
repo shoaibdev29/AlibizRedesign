@@ -18,20 +18,39 @@ class DMReview extends Model
     protected $appends = ['attachment_fullpath'];
 
     public function getAttachmentFullPathAttribute()
-    {
-        $value = $this->attachment ?? [];
-        $imageUrlArray = is_array($value) ? $value : json_decode($value, true);
-        if (is_array($imageUrlArray)) {
-            foreach ($imageUrlArray as $key => $item) {
-                if (Storage::disk('public')->exists('review/' . $item)) {
-                    $imageUrlArray[$key] = asset('storage/app/public/review/'. $item) ;
-                } else {
-                    $imageUrlArray[$key] = asset('public/assets/admin/img/400x400/img2.jpg');
-                }
-            }
-        }
-        return $imageUrlArray;
+{
+    $value = $this->attachment ?? [];
+    $attachments = is_array($value) ? $value : json_decode($value, true);
+
+    if (!is_array($attachments) || empty($attachments)) {
+        return [asset('assets/admin/img/400x400/img2.jpg')];
     }
+
+    foreach ($attachments as $key => $item) {
+        if (empty($item)) {
+            $attachments[$key] = asset('assets/admin/img/400x400/img2.jpg');
+            continue;
+        }
+
+        // if already a full URL (http/https), keep it as-is
+        if (preg_match('/^https?:\/\//i', $item)) {
+            $attachments[$key] = $item;
+            continue;
+        }
+
+        $storagePath = 'review/' . ltrim($item, '/');
+
+        if (Storage::disk('public')->exists($storagePath)) {
+            // correct URL => /storage/review/filename.jpg
+            $attachments[$key] = Storage::url($storagePath);
+        } else {
+            $attachments[$key] = asset('assets/admin/img/400x400/img2.jpg');
+        }
+    }
+
+    return $attachments;
+}
+
 
 
     public function customer(): \Illuminate\Database\Eloquent\Relations\BelongsTo

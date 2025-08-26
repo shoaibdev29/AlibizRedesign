@@ -46,26 +46,51 @@ class Category extends Model
 
     protected $appends = ['image_fullpath', 'banner_image_fullpath'];
 
-    public function getImageFullPathAttribute(): string
-    {
-        $image = $this->image ?? null;
-        $path = asset('public/assets/admin/img/160x160/img2.jpg');
+   public function getImageFullPathAttribute(): string
+{
+    $image = $this->image ?? null;
+    $fallback = asset('assets/admin/img/160x160/img2.jpg');
 
-        if (!is_null($image) && Storage::disk('public')->exists('category/' . $image)) {
-            $path = asset('storage/app/public/category/' . $image);
-        }
-        return $path;
+    if (empty($image)) {
+        return $fallback;
     }
-    public function getBannerImageFullPathAttribute(): string
-    {
-        $image = $this->banner_image ?? null;
-        $path = asset('public/assets/admin/img/8_1.png');
 
-        if (!is_null($image) && Storage::disk('public')->exists('category/banner/' . $image)) {
-            $path = asset('storage/app/public/category/banner/' . $image);
-        }
-        return $path;
+    // already an absolute URL? return as-is
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
     }
+
+    $storagePath = 'category/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath); // => /storage/category/filename.jpg
+    }
+
+    return $fallback;
+}
+
+public function getBannerImageFullPathAttribute(): string
+{
+    $image = $this->banner_image ?? null;
+    $fallback = asset('assets/admin/img/8_1.png');
+
+    if (empty($image)) {
+        return $fallback;
+    }
+
+    if (preg_match('/^https?:\/\//i', $image)) {
+        return $image;
+    }
+
+    $storagePath = 'category/banner/' . ltrim($image, '/');
+
+    if (Storage::disk('public')->exists($storagePath)) {
+        return Storage::url($storagePath); // => /storage/category/banner/filename.png
+    }
+
+    return $fallback;
+}
+
 
     protected static function booted(): void
     {

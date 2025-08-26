@@ -24,39 +24,58 @@ class Product extends Model
 
     protected $appends = ['image_fullpath'];
 
-   public function getImageFullPathAttribute()
+  public function getImageFullPathAttribute(): array
 {
-    $value = $this->image ?? [];
-    $images = is_array($value) ? $value : json_decode($value, true);
+    $raw = $this->image ?? [];
 
-    if (!is_array($images) || empty($images)) {
-        // single safe fallback
-        return [asset('assets/admin/img/160x160/img2.jpg')];
-    }
-
-    foreach ($images as $key => $item) {
-        if (empty($item)) {
-            $images[$key] = asset('assets/admin/img/160x160/img2.jpg');
-            continue;
-        }
-
-        // if already a full URL, keep it
-        if (preg_match('/^https?:\/\//i', $item)) {
-            $images[$key] = $item;
-            continue;
-        }
-
-        // storage file exists?
-        if (Storage::disk('public')->exists('product/'.$item)) {
-            // makes /storage/product/filename.jpg
-            $images[$key] = Storage::url('product/'.$item);
+    // Normalize to array
+    if (is_string($raw)) {
+        $decoded = json_decode($raw, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $images = $decoded;
+        } elseif (trim($raw) !== '') {
+            // single filename stored as plain string
+            $images = [$raw];
         } else {
-            // fallback (NO "public/" prefix here)
-            $images[$key] = asset('assets/admin/img/160x160/img2.jpg');
+            $images = [];
+        }
+    } elseif (is_array($raw)) {
+        $images = $raw;
+    } else {
+        $images = [];
+    }
+
+    // Fallback (NO "public/" prefix)
+    $fallback = asset('assets/admin/img/160x160/img2.jpg');
+
+    if (empty($images)) {
+        return [$fallback];
+    }
+
+    $out = [];
+    foreach ($images as $item) {
+        $item = is_string($item) ? trim($item) : '';
+        if ($item === '') {
+            $out[] = $fallback;
+            continue;
+        }
+
+        // already absolute URL?
+        if (preg_match('/^https?:\/\//i', $item)) {
+            $out[] = $item;
+            continue;
+        }
+
+        $path = 'product/' . ltrim($item, '/');
+        if (Storage::disk('public')->exists($path)) {
+            $out[] = Storage::url($path); // /storage/product/filename
+        } else {
+            $out[] = $fallback;
         }
     }
 
-    return $images;
+    // remove dupes & reindex
+    return array_values(array_unique($out));
 }
 
 
