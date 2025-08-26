@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="{{asset('assets/admin/vendor/icon-set/style.css')}}">
 
     <link rel="stylesheet" href="{{asset('assets/admin/css/theme.minc619.css?v=1.0')}}">
-    <link rel="stylesheet" href="{{asset('assets/admin/css/style.css')}}">
+    <link rel="stylesheet" href="{{asset('public/assets/admin/css/style.css')}}">
     <link rel="stylesheet" href="{{asset('assets/admin/css/toastr.css')}}">
 </head>
 
